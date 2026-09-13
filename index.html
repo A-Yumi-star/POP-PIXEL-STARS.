@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pop Pixel Stars: Tour of Legends</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+    body {
+      background: radial-gradient(circle at center, #1b0c2e 0%, #05030a 100%);
+      color: #fff;
+      font-family: 'Courier New', monospace;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 10px;
+      overflow-x: hidden;
+    }
+    #game-container {
+      position: relative;
+      border: 4px solid #ff007f;
+      border-radius: 12px;
+      box-shadow: 0 0 40px rgba(255, 0, 127, 0.45), inset 0 0 25px rgba(0,0,0,0.9);
+      background: #000;
+      max-width: 100%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    canvas {
+      display: block;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      width: 100%;
+      max-width: 960px;
+      height: auto;
+      aspect-ratio: 16 / 9;
+      border-radius: 8px;
+    }
+    #nick-modal {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(15, 10, 28, 0.96);
+      border: 3px solid #00ffff;
+      box-shadow: 0 0 35px rgba(0, 255, 255, 0.4);
+      padding: 20px 24px;
+      border-radius: 10px;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      z-index: 100;
+      text-align: center;
+      width: 90%;
+      max-width: 320px;
+    }
+    #nickname-input {
+      background: #080414;
+      border: 2px solid #ff007f;
+      color: #fff;
+      font-family: 'Courier New', monospace;
+      font-size: 16px;
+      font-weight: bold;
+      padding: 8px 14px;
+      text-align: center;
+      outline: none;
+      border-radius: 6px;
+      text-transform: uppercase;
+      width: 100%;
+    }
+    .retro-btn {
+      background: #ff007f;
+      color: #fff;
+      border: none;
+      font-family: 'Courier New', monospace;
+      font-weight: bold;
+      font-size: 12px;
+      padding: 8px 18px;
+      border-radius: 6px;
+      cursor: pointer;
+      box-shadow: 0 4px #99004d;
+    }
+    .retro-btn:active { transform: translateY(2px); box-shadow: 0 2px #99004d; }
+    #nick-error { color: #ff3366; font-size: 11px; font-weight: bold; min-height: 14px; }
+    .instructions {
+      margin-top: 10px;
+      font-size: 12px;
+      color: #aaa;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 15px;
+      text-align: center;
+    }
+    .instructions span { color: #00ffff; font-weight: bold; }
+  </style>
+</head>
+<body>
+
+  <div id="game-container">
+    <canvas id="canvas" width="384" height="216"></canvas>
+
+    <div id="nick-modal">
+      <h2 style="font-size: 13px; color: #00ffff; letter-spacing: 1px;">IDENTIFICAÇÃO DE PASSAPORTE</h2>
+      <p style="font-size: 10px; color: #aaa;">Cadastre seu Nickname exclusivo para gravar seus recordes.</p>
+      <input type="text" id="nickname-input" maxlength="10" placeholder="SEU NICKNAME" autocomplete="off" />
+      <button class="retro-btn" id="confirm-nick-btn">SALVAR E ENTRAR</button>
+      <div id="nick-error"></div>
+    </div>
+  </div>
+
+  <div class="instructions">
+    <div>Mover: <span>← → / A D</span></div>
+    <div>Pular: <span>ESPAÇO / W / ↑</span></div>
+    <div>Pausa / Volume: <span>ESC / P</span></div>
+    <div>Reiniciar Fase: <span>R</span></div>
+  </div>
+
+<script>
+// ============================================================================
+// 1. PERSISTÊNCIA SEGURA
+// ============================================================================
+const STORAGE_NICK_KEY = 'pop_pixel_gh_nick';
+const STORAGE_BOARD_KEY = 'pop_pixel_gh_board';
+
+const memoryStorage = {};
+function safeGet(key) {
+  try {
+    return window.localStorage ? window.localStorage.getItem(key) : memoryStorage[key];
+  } catch (e) {
+    return memoryStorage[key] || null;
+  }
+}
+function safeSet(key, value) {
+  try {
+    if (window.localStorage) window.localStorage.setItem(key, value);
+    else memoryStorage[key] = value;
+  } catch (e) {
+    memoryStorage[key] = value;
+  }
+}
+
+let currentUser = safeGet(STORAGE_NICK_KEY) || null;
+
+function getRegisteredUsers() {
+  const data = safeGet(STORAGE_BOARD_KEY);
+  try {
+    return data ? JSON.parse(data) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+// ============================================================================
+// 2. MOTOR DE ÁUDIO CHIPTUNE NATIVO
+// ============================================================================
+let audioCtx = null;
+let masterGain = null;
+let masterVolume = 0.5;
+
+function getAudioContext() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    masterGain = audioCtx.createGain();
+    masterGain.gain.setValueAtTime(masterVolume, audioCtx.currentTime);
+    masterGain.connect(audioCtx.destination);
+  }
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  return audioCtx;
+}
+
+function m2f(m) {
+  return (!m || m <= 0) ? 0 : 440 * Math.pow(2, (m - 69) / 12);
+}
+
+class ChiptuneTracker {
+  constructor() {
+    this.timer = null;
+    this.step = 0;
+    this.track = null;
+  }
+  stop() {
+    if (this.timer) { clearInterval(this.timer); this.timer = null; }
+    this.track = null;
+  }
+}
+const music = new ChiptuneTracker();
+
+const TRACK_ESPRESSO = {
+  bpm: 118,
+  lead: [64, 64, 62, 60, 57, 0, 57, 60, 62, 0, 64, 67, 64, 62, 60, 0],
+  bass: [48, 0, 48, 52, 55, 0, 45, 0, 41, 0, 41, 45, 48, 0, 43, 0],
+  drums: [1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0]
+};
+const TRACK_NEWJEANS = {
+  bpm: 150,
+  lead: [65, 67, 68, 72, 70, 68, 67, 65, 67, 68, 72, 75, 72, 70, 68, 67],
+  bass: [41, 0, 41, 44, 46, 0, 46, 44, 39, 0, 39, 41, 44, 0, 46, 0],
+  drums: [1, 0, 1, 1, 0, 1, 1, 0, 1, 0, 1, 1, 0, 1, 1, 0]
+};
+const TRACK_SHAPEOFYOU = {
+  bpm: 96,
+  lead: [68, 68, 68, 71, 68, 66, 64, 64, 68, 68, 68, 71, 68, 66, 64, 0],
+  bass: [44, 0, 44, 0, 41, 0, 41, 0, 37, 0, 37, 0, 39, 0, 39, 0],
+  drums: [1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1]
+};
+
+// ============================================================================
+// 3. SPRITES DE PIXEL ART E ROSTER
+// ============================================================================
+const PALETTE = {
+  '.': null, 'K': '#05030a', 'W': '#ffffff', 'S': '#ffd8b3',
+  'Y': '#facc15', 'R': '#ef233c', 'B': '#38bdf8', 'P': '#ec4899', 'O': '#f97316'
+};
+
+const S_SABRINA = ["..YYYYYY..", ".YYYYYYYY.", ".YYKKKKYY.", ".YYSSSKKY.", "..SSSSSS..", "..BBBBBB..", "..BBPPBB..", "...SSSS...", "..WW..WW.."];
+const S_MINJI   = ["..KKKKKK..", ".KKKKKKKK.", ".KKSSSSKK.", "..SSSSSS..", "..WWWWWW..", "..WWWWWW..", "..PPPPPP..", "...SS..SS.", "..WW..WW.."];
+const S_ED      = ["..OOOOOO..", ".OOOOOOOO.", ".OOSSSSOO.", "..SSSSSS..", "..bBbbbB..", "..bBbbbB..", "..KKKKKK..", "...KK..KK.", "..WW..WW.."];
+
+const I_COFFEE  = [".WW..WW.", ".CCCCCC.", ".CKKKKC.", ".CCCCCC.", "..CCCC.."];
+const I_BUNNY   = ["PP....PP", "PP....PP", "PPPPPPPP", ".PPKKPP.", "..PPPP.."];
+const I_BOXING  = [".RRRRRR.", "RRRRRRRR", "RRRRRRRR", ".RRRRRR.", "..RRRR.."];
+
+const ROSTER = [
+  { id: 0, artist: "Sabrina Carpenter", title: "ESPRESSO", isBand: false, category: "SOLO", difficulty: 1, track: TRACK_ESPRESSO, members: [{name:"Sabrina", sprite:S_SABRINA}], sky:"#38bdf8", ground:"#b45309", accent:"#f43f5e", theme:"Praia Retrô Pastel", itemSprite:I_COFFEE, itemName:"Café Expresso", layoutType:"BEACH" },
+  { id: 1, artist: "NewJeans", title: "SUPER SHY", isBand: true, category: "BANDA", difficulty: 2, track: TRACK_NEWJEANS, members: [{name:"Minji", sprite:S_MINJI}], sky:"#60a5fa", ground:"#f472b6", accent:"#facc15", theme:"Praça Y2K com Bondinho", itemSprite:I_BUNNY, itemName:"Orelhas Bunny", layoutType:"STREET" },
+  { id: 2, artist: "Ed Sheeran", title: "SHAPE OF YOU", isBand: false, category: "SOLO", difficulty: 3, track: TRACK_SHAPEOFYOU, members: [{name:"Ed Sheeran", sprite:S_ED}], sky:"#0284c7", ground:"#0f172a", accent:"#38bdf8", theme:"Ringue de Boxe Urbano", itemSprite:I_BOXING, itemName:"Luva de Boxe", layoutType:"STREET" }
+];
+
+// ============================================================================
+// 4. INICIALIZAÇÃO DO CANVAS
+// ============================================================================
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+function render() {
+  ctx.fillStyle = '#000000';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  ctx.fillStyle = '#00ffff';
+  ctx.font = '10px "Courier New"';
+  ctx.textAlign = 'center';
+  ctx.fillText('POP PIXEL STARS - TELA PRONTA', canvas.width / 2, canvas.height / 2);
+
+  requestAnimationFrame(render);
+}
+
+render();
+</script>
+</body>
+</html>
