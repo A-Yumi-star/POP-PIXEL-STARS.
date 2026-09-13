@@ -16,87 +16,52 @@
       justify-content: center;
       min-height: 100vh;
       padding: 10px;
-      overflow-x: hidden;
     }
     #game-container {
       position: relative;
       border: 4px solid #ff007f;
       border-radius: 12px;
-      box-shadow: 0 0 40px rgba(255, 0, 127, 0.45), inset 0 0 25px rgba(0,0,0,0.9);
+      box-shadow: 0 0 40px rgba(255, 0, 127, 0.45);
       background: #000;
-      max-width: 100%;
-      display: flex;
-      justify-content: center;
-      align-items: center;
     }
     canvas {
       display: block;
       image-rendering: pixelated;
-      image-rendering: crisp-edges;
       width: 100%;
-      max-width: 960px;
+      max-width: 800px;
       height: auto;
       aspect-ratio: 16 / 9;
-      border-radius: 8px;
     }
     #nick-modal {
       position: absolute;
-      top: 50%;
-      left: 50%;
+      top: 50%; left: 50%;
       transform: translate(-50%, -50%);
-      background: rgba(15, 10, 28, 0.96);
-      border: 3px solid #00ffff;
-      box-shadow: 0 0 35px rgba(0, 255, 255, 0.4);
-      padding: 20px 24px;
-      border-radius: 10px;
-      display: none;
+      background: rgba(15, 10, 28, 0.95);
+      border: 2px solid #00ffff;
+      padding: 20px;
+      border-radius: 8px;
+      display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 12px;
-      z-index: 100;
-      text-align: center;
-      width: 90%;
-      max-width: 320px;
+      gap: 10px;
     }
-    #nickname-input {
+    input {
       background: #080414;
-      border: 2px solid #ff007f;
+      border: 1px solid #ff007f;
       color: #fff;
-      font-family: 'Courier New', monospace;
-      font-size: 16px;
-      font-weight: bold;
-      padding: 8px 14px;
+      padding: 6px;
       text-align: center;
-      outline: none;
-      border-radius: 6px;
       text-transform: uppercase;
-      width: 100%;
     }
-    .retro-btn {
+    button {
       background: #ff007f;
       color: #fff;
       border: none;
-      font-family: 'Courier New', monospace;
-      font-weight: bold;
-      font-size: 12px;
-      padding: 8px 18px;
-      border-radius: 6px;
+      padding: 6px 12px;
       cursor: pointer;
-      box-shadow: 0 4px #99004d;
+      font-weight: bold;
     }
-    .retro-btn:active { transform: translateY(2px); box-shadow: 0 2px #99004d; }
-    #nick-error { color: #ff3366; font-size: 11px; font-weight: bold; min-height: 14px; }
-    .instructions {
-      margin-top: 10px;
-      font-size: 12px;
-      color: #aaa;
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: center;
-      gap: 15px;
-      text-align: center;
-    }
-    .instructions span { color: #00ffff; font-weight: bold; }
+    .instructions { margin-top: 10px; font-size: 12px; color: #aaa; text-align: center; }
   </style>
 </head>
 <body>
@@ -105,437 +70,112 @@
     <canvas id="canvas" width="384" height="216"></canvas>
 
     <div id="nick-modal">
-      <h2 style="font-size: 13px; color: #00ffff; letter-spacing: 1px;">IDENTIFICAÇÃO DE PASSAPORTE</h2>
-      <p style="font-size: 10px; color: #aaa;">Cadastre seu Nickname exclusivo para gravar seus recordes.</p>
-      <input type="text" id="nickname-input" maxlength="10" placeholder="SEU NICKNAME" autocomplete="off" />
-      <button class="retro-btn" id="confirm-nick-btn">SALVAR E ENTRAR</button>
-      <div id="nick-error"></div>
+      <h3 style="color: #00ffff; font-size: 12px;">IDENTIFICAÇÃO</h3>
+      <input type="text" id="nickname-input" maxlength="10" placeholder="SEU NICK" autocomplete="off" />
+      <button id="confirm-nick-btn">JOGAR</button>
     </div>
   </div>
 
   <div class="instructions">
-    <div>Mover: <span>← → / A D</span></div>
-    <div>Pular: <span>ESPAÇO / W / ↑</span></div>
-    <div>Pausa / Volume: <span>ESC / P</span></div>
-    <div>Reiniciar Fase: <span>R</span></div>
+    Mover: <b>A / D ou Seta Esquerda/Direita</b> | Pular: <b>ESPAÇO / W / Seta Cima</b>
   </div>
 
 <script>
-// ============================================================================
-// 1. PERSISTÊNCIA SEGURA (COM FALLBACK EM MEMÓRIA PARA GITHUB PAGES)
-// ============================================================================
-const STORAGE_NICK_KEY = 'pop_pixel_gh_nick';
-const STORAGE_BOARD_KEY = 'pop_pixel_gh_board';
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const modal = document.getElementById('nick-modal');
+const input = document.getElementById('nickname-input');
+const btn = document.getElementById('confirm-nick-btn');
 
-const memoryStorage = {};
-function safeGet(key) {
-  try {
-    return window.localStorage ? window.localStorage.getItem(key) : memoryStorage[key];
-  } catch (e) {
-    return memoryStorage[key] || null;
-  }
-}
-function safeSet(key, value) {
-  try {
-    if (window.localStorage) window.localStorage.setItem(key, value);
-    else memoryStorage[key] = value;
-  } catch (e) {
-    memoryStorage[key] = value;
-  }
+let nick = localStorage.getItem('pop_pixel_nick') || '';
+
+if (nick) {
+  modal.style.display = 'none';
+} else {
+  modal.style.display = 'flex';
 }
 
-let currentUser = safeGet(STORAGE_NICK_KEY) || null;
-
-function getRegisteredUsers() {
-  const data = safeGet(STORAGE_BOARD_KEY);
-  try {
-    return data ? JSON.parse(data) : [];
-  } catch (e) {
-    return [];
+btn.addEventListener('click', () => {
+  if (input.value.trim().length > 0) {
+    nick = input.value.trim().toUpperCase();
+    localStorage.setItem('pop_pixel_nick', nick);
+    modal.style.display = 'none';
   }
+});
+
+// Dados do Jogador
+const player = {
+  x: 50,
+  y: 150,
+  w: 12,
+  h: 16,
+  vx: 0,
+  vy: 0,
+  speed: 2,
+  jumpPower: -5.5,
+  gravity: 0.25,
+  grounded: false
+};
+
+const keys = {};
+
+window.addEventListener('keydown', e => keys[e.code] = true);
+window.addEventListener('keyup', e => keys[e.code] = false);
+
+function update() {
+  // Controles
+  if (keys['ArrowRight'] || keys['KeyD']) player.vx = player.speed;
+  else if (keys['ArrowLeft'] || keys['KeyA']) player.vx = -player.speed;
+  else player.vx = 0;
+
+  if ((keys['Space'] || keys['KeyW'] || keys['ArrowUp']) && player.grounded) {
+    player.vy = player.jumpPower;
+    player.grounded = false;
+  }
+
+  // Gravidade e Movimento
+  player.vy += player.gravity;
+  player.x += player.vx;
+  player.y += player.vy;
+
+  // Colisão com o Chão (Y = 170)
+  if (player.y + player.h >= 170) {
+    player.y = 170 - player.h;
+    player.vy = 0;
+    player.grounded = true;
+  }
+
+  // Limites da Tela
+  if (player.x < 0) player.x = 0;
+  if (player.x + player.w > canvas.width) player.x = canvas.width - player.w;
 }
 
-function saveUserRecord(nick, scoreToAdd, stars) {
-  let board = getRegisteredUsers();
-  let user = board.find(u => u.nick === nick);
-  if (!user) {
-    user = { nick, score: 0, stars: 0 };
-    board.push(user);
-  }
-  user.score += scoreToAdd;
-  user.stars += stars;
-  board.sort((a, b) => b.score - a.score);
-  safeSet(STORAGE_BOARD_KEY, JSON.stringify(board));
+function render() {
+  // Fundo
+  ctx.fillStyle = '#1b0c2e';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Chão
+  ctx.fillStyle = '#b45309';
+  ctx.fillRect(0, 170, canvas.width, 46);
+
+  // Jogador (Quadrado Rosa)
+  ctx.fillStyle = '#ff007f';
+  ctx.fillRect(player.x, player.y, player.w, player.h);
+
+  // HUD / Nickname
+  ctx.fillStyle = '#00ffff';
+  ctx.font = '10px monospace';
+  ctx.fillText('JOGADOR: ' + (nick || 'ANÔNIMO'), 10, 15);
 }
 
-// ============================================================================
-// 2. MOTOR DE ÁUDIO CHIPTUNE NATIVO
-// ============================================================================
-let audioCtx = null;
-let masterGain = null;
-let masterVolume = 0.5;
-
-function getAudioContext() {
-  if (!audioCtx) {
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    masterGain = audioCtx.createGain();
-    masterGain.gain.setValueAtTime(masterVolume, audioCtx.currentTime);
-    masterGain.connect(audioCtx.destination);
-  }
-  if (audioCtx.state === 'suspended') audioCtx.resume();
-  return audioCtx;
+function gameLoop() {
+  update();
+  render();
+  requestAnimationFrame(gameLoop);
 }
 
-function setVolume(v) {
-  masterVolume = Math.max(0, Math.min(1, v));
-  if (masterGain && audioCtx) {
-    masterGain.gain.setValueAtTime(masterVolume, audioCtx.currentTime);
-  }
-}
-
-function m2f(m) {
-  return (!m || m <= 0) ? 0 : 440 * Math.pow(2, (m - 69) / 12);
-}
-
-class ChiptuneTracker {
-  constructor() {
-    this.timer = null;
-    this.step = 0;
-    this.track = null;
-  }
-  play(track) {
-    this.stop();
-    this.track = track;
-    this.step = 0;
-    const ctx = getAudioContext();
-    const stepDuration = (60 / track.bpm) / 4;
-
-    this.timer = setInterval(() => {
-      if (!this.track) return;
-      const now = ctx.currentTime;
-      const l = this.track.lead[this.step % this.track.lead.length];
-      if (l > 0) this.tone(m2f(l), 'square', stepDuration * 0.85, 0.12, now);
-      const b = this.track.bass[this.step % this.track.bass.length];
-      if (b > 0) this.tone(m2f(b), 'triangle', stepDuration * 0.9, 0.22, now);
-      if (this.track.drums && this.track.drums[this.step % this.track.drums.length]) {
-        this.noise(0.04, 0.08, now);
-      }
-      this.step++;
-    }, stepDuration * 1000);
-  }
-  stop() {
-    if (this.timer) { clearInterval(this.timer); this.timer = null; }
-    this.track = null;
-  }
-  tone(freq, type, duration, vol, time) {
-    try {
-      const ctx = getAudioContext();
-      const osc = ctx.createOscillator();
-      const g = ctx.createGain();
-      osc.type = type;
-      osc.frequency.setValueAtTime(freq, time);
-      g.gain.setValueAtTime(vol, time);
-      g.gain.exponentialRampToValueAtTime(0.0001, time + duration);
-      osc.connect(g);
-      g.connect(masterGain);
-      osc.start(time);
-      osc.stop(time + duration);
-    } catch(e){}
-  }
-  noise(duration, vol, time) {
-    try {
-      const ctx = getAudioContext();
-      const buffer = ctx.createBuffer(1, ctx.sampleRate * duration, ctx.sampleRate);
-      const data = buffer.getChannelData(0);
-      for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
-      const src = ctx.createBufferSource();
-      src.buffer = buffer;
-      const g = ctx.createGain();
-      g.gain.setValueAtTime(vol, time);
-      g.gain.exponentialRampToValueAtTime(0.001, time + duration);
-      src.connect(g);
-      g.connect(masterGain);
-      src.start(time);
-    } catch(e){}
-  }
-  sfxJump() { this.tone(180, 'square', 0.12, 0.15, getAudioContext().currentTime); }
-  sfxCoin() {
-    const t = getAudioContext().currentTime;
-    this.tone(987, 'sine', 0.08, 0.18, t);
-    this.tone(1318, 'sine', 0.18, 0.18, t + 0.07);
-  }
-  sfxStar() {
-    const t = getAudioContext().currentTime;
-    [659, 830, 987, 1318].forEach((f, i) => this.tone(f, 'sine', 0.1, 0.2, t + i * 0.06));
-  }
-  sfxHit() { this.tone(140, 'sawtooth', 0.15, 0.25, getAudioContext().currentTime); }
-  sfxSwitch() {
-    const t = getAudioContext().currentTime;
-    this.tone(440, 'triangle', 0.08, 0.2, t);
-    this.tone(880, 'square', 0.14, 0.2, t + 0.08);
-  }
-}
-const music = new ChiptuneTracker();
-
-// PARTITURAS DOS INSTRUMENTAIS DAS MÚSICAS
-const TRACK_THEME_INTRO = {
-  bpm: 124,
-  lead: [69, 72, 74, 76, 74, 72, 69, 72, 74, 76, 79, 76, 74, 72, 69, 0],
-  bass: [45, 0, 45, 0, 48, 0, 48, 0, 41, 0, 41, 0, 43, 0, 43, 0],
-  drums: [1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1]
-};
-const TRACK_QUEEN = {
-  bpm: 72,
-  lead: [70, 72, 74, 75, 74, 72, 70, 0, 67, 70, 72, 74, 72, 70, 67, 0],
-  bass: [46, 0, 46, 0, 43, 0, 43, 0, 39, 0, 39, 0, 41, 0, 41, 0],
-  drums: [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0]
-};
-const TRACK_COLDPLAY = {
-  bpm: 138,
-  lead: [61, 61, 63, 65, 68, 65, 63, 61, 63, 63, 65, 68, 70, 68, 65, 63],
-  bass: [37, 37, 37, 37, 41, 41, 41, 41, 44, 44, 44, 44, 41, 41, 41, 41],
-  drums: [1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0]
-};
-const TRACK_GORILLAZ = {
-  bpm: 139,
-  lead: [63, 0, 63, 66, 68, 70, 68, 66, 65, 63, 0, 63, 66, 68, 65, 0],
-  bass: [39, 39, 42, 44, 46, 44, 42, 41, 39, 39, 42, 44, 41, 0, 39, 0],
-  drums: [1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0]
-};
-const TRACK_NEWJEANS = {
-  bpm: 150,
-  lead: [65, 67, 68, 72, 70, 68, 67, 65, 67, 68, 72, 75, 72, 70, 68, 67],
-  bass: [41, 0, 41, 44, 46, 0, 46, 44, 39, 0, 39, 41, 44, 0, 46, 0],
-  drums: [1, 0, 1, 1, 0, 1, 1, 0, 1, 0, 1, 1, 0, 1, 1, 0]
-};
-const TRACK_ESPRESSO = {
-  bpm: 118,
-  lead: [64, 64, 62, 60, 57, 0, 57, 60, 62, 0, 64, 67, 64, 62, 60, 0],
-  bass: [48, 0, 48, 52, 55, 0, 45, 0, 41, 0, 41, 45, 48, 0, 43, 0],
-  drums: [1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0]
-};
-const TRACK_DYNAMITE = {
-  bpm: 114,
-  lead: [66, 66, 66, 69, 71, 0, 71, 69, 66, 64, 66, 0, 69, 71, 74, 71],
-  bass: [42, 0, 42, 45, 47, 0, 47, 45, 40, 0, 40, 42, 42, 0, 45, 47],
-  drums: [1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0]
-};
-const TRACK_BEGGIN = {
-  bpm: 130,
-  lead: [64, 64, 64, 67, 69, 0, 67, 64, 62, 64, 0, 67, 69, 71, 69, 67],
-  bass: [40, 40, 40, 0, 45, 45, 45, 0, 43, 43, 43, 0, 38, 38, 40, 0],
-  drums: [1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1]
-};
-const TRACK_BLACKPINK = {
-  bpm: 140,
-  lead: [73, 73, 73, 73, 0, 71, 69, 71, 73, 73, 73, 73, 76, 73, 71, 69],
-  bass: [45, 45, 0, 45, 42, 42, 0, 42, 45, 45, 0, 45, 47, 47, 45, 42],
-  drums: [1, 0, 1, 1, 1, 0, 1, 0, 1, 0, 1, 1, 1, 0, 1, 1]
-};
-const TRACK_BADROMANCE = {
-  bpm: 119,
-  lead: [69, 69, 69, 69, 68, 69, 71, 0, 69, 69, 69, 69, 67, 69, 64, 0],
-  bass: [45, 0, 45, 0, 41, 0, 41, 0, 43, 0, 43, 0, 40, 0, 40, 0],
-  drums: [1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0]
-};
-const TRACK_CRUELSUMMER = {
-  bpm: 170,
-  lead: [69, 69, 69, 71, 73, 0, 73, 71, 69, 69, 69, 71, 74, 73, 71, 69],
-  bass: [45, 45, 45, 45, 42, 42, 42, 42, 38, 38, 38, 38, 40, 40, 40, 40],
-  drums: [1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0]
-};
-const TRACK_BLINDING = {
-  bpm: 171,
-  lead: [65, 0, 65, 63, 65, 68, 60, 0, 58, 0, 56, 58, 60, 0, 0, 0],
-  bass: [41, 41, 41, 41, 37, 37, 37, 37, 39, 39, 39, 39, 36, 36, 36, 36],
-  drums: [1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0]
-};
-const TRACK_THRILLER = {
-  bpm: 118,
-  lead: [63, 63, 0, 63, 66, 68, 70, 0, 68, 66, 63, 0, 61, 63, 0, 0],
-  bass: [39, 0, 39, 42, 44, 0, 46, 0, 44, 0, 42, 0, 39, 0, 37, 0],
-  drums: [1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0]
-};
-const TRACK_ATTENTION = {
-  bpm: 100,
-  lead: [71, 69, 67, 64, 67, 69, 71, 0, 71, 69, 67, 64, 62, 64, 0, 0],
-  bass: [35, 0, 35, 40, 42, 0, 42, 40, 38, 0, 38, 43, 45, 0, 42, 40],
-  drums: [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0]
-};
-const TRACK_ASITWAS = {
-  bpm: 174,
-  lead: [69, 71, 73, 71, 69, 66, 69, 0, 69, 71, 73, 71, 69, 71, 66, 0],
-  bass: [45, 45, 45, 45, 42, 42, 42, 42, 38, 38, 38, 38, 40, 40, 40, 40],
-  drums: [1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0]
-};
-const TRACK_SHAPEOFYOU = {
-  bpm: 96,
-  lead: [68, 68, 68, 71, 68, 66, 64, 64, 68, 68, 68, 71, 68, 66, 64, 0],
-  bass: [44, 0, 44, 0, 41, 0, 41, 0, 37, 0, 37, 0, 39, 0, 39, 0],
-  drums: [1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1]
-};
-
-// ============================================================================
-// 3. SPRITES DE PIXEL ART
-// ============================================================================
-const PALETTE = {
-  '.': null,
-  'K': '#05030a',
-  'W': '#ffffff',
-  'S': '#ffd8b3',
-  'T': '#99582a',
-  'R': '#ef233c',
-  'B': '#38bdf8',
-  'b': '#1d4ed8',
-  'Y': '#facc15',
-  'G': '#22c55e',
-  'P': '#ec4899',
-  'V': '#a855f7',
-  'O': '#f97316',
-  'C': '#78350f',
-  'Z': '#84cc16',
-  'N': '#00ffff'
-};
-
-function drawSprite(ctx, x, y, matrix, flip = false) {
-  const h = matrix.length;
-  const w = matrix[0].length;
-
-  ctx.fillStyle = "#000000";
-  for (let r = 0; r < h; r++) {
-    for (let c = 0; c < w; c++) {
-      if (matrix[r][c] !== '.') {
-        const px = flip ? x + (w - 1 - c) : x + c;
-        const py = y + r;
-        ctx.fillRect(px - 1, py, 3, 1);
-        ctx.fillRect(px, py - 1, 1, 3);
-      }
-    }
-  }
-
-  for (let r = 0; r < h; r++) {
-    for (let c = 0; c < w; c++) {
-      const color = PALETTE[matrix[r][c]];
-      if (color) {
-        ctx.fillStyle = color;
-        const px = flip ? x + (w - 1 - c) : x + c;
-        const py = y + r;
-        ctx.fillRect(Math.floor(px), Math.floor(py), 1, 1);
-      }
-    }
-  }
-}
-
-// Modelos de Personagens
-const S_FREDDIE = ["..KKKKKK..", ".KKKKKKKK.", ".KKSSSSKK.", "..SSSSSS..", "..KKKKKK..", "..WWWWWW..", "..WWWWWW..", "...WW..WW.", "..WW..WW.."];
-const S_BRIAN   = ["..CCCCCC..", ".CCCCCCCC.", ".CCSSSSCC.", "..SSSSSS..", "..RRRRRR..", "..RRRRRR..", "..KKKKKK..", "...KK..KK.", "..KK..KK.."];
-const S_ROGER   = ["..YYYYYY..", ".YYYYYYYY.", ".YYSSSSYY.", "..SSSSSS..", "..bBbbbB..", "..bBbbbB..", "..KKKKKK..", "...KK..KK.", "..WW..WW.."];
-const S_DEACON  = ["..KKKKKK..", ".KKKKKKKK.", ".KKSSSSKK.", "..SSSSSS..", "..YYYYYY..", "..YYYYYY..", "..KKKKKK..", "...KK..KK.", "..KK..KK.."];
-
-const S_2D      = ["..BBBBBB..", ".BBBBBBBB.", ".BBSSSSBB.", "..SKKSSK..", "..WWWWWW..", "..WWWWWW..", "..KKKKKK..", "...KK..KK.", "..WW..WW.."];
-const S_MURDOC  = ["..KKKKKK..", ".KKKKKKKK.", ".KKZZZZKK.", "..ZZZZZZ..", "..RRRRRR..", "..RRRRRR..", "..KKKKKK..", "...KK..KK.", "..KK..KK.."];
-const S_NOODLE  = ["..VVVVVV..", ".VVVVVVVV.", ".VVSSSSVV.", "..SSSSSS..", "..PPPPPP..", "..PPPPPP..", "..WWWWWW..", "...WW..WW.", "..VV..VV.."];
-const S_RUSSEL  = ["..RRRRRR..", ".RRRRRRRR.", ".RRTSSSTR.", "..TTTTTT..", "..YYYYYY..", "..YYYYYY..", "..bBbbbB..", "...bB..bB.", "..WW..WW.."];
-
-const S_CHRIS   = ["..CCCCCC..", ".CCCCCCCC.", ".CCSSSSCC.", "..SSSSSS..", "..KKKKKK..", "..KKYPKK..", "..KKKKKK..", "...KK..KK.", "..WW..WW.."];
-const S_JONNY   = ["..KKKKKK..", ".KKKKKKKK.", ".KKSSSSKK.", "..SSSSSS..", "..bBbbbB..", "..bBbbbB..", "..KKKKKK..", "...KK..KK.", "..KK..KK.."];
-
-const S_MINJI   = ["..KKKKKK..", ".KKKKKKKK.", ".KKSSSSKK.", "..SSSSSS..", "..WWWWWW..", "..WWWWWW..", "..PPPPPP..", "...SS..SS.", "..WW..WW.."];
-const S_HANNI   = ["..CCCCCC..", ".CCCCCCCC.", ".CCSSSSCC.", "..SSSSSS..", "..BBBBBB..", "..BBBBBB..", "..WWWWWW..", "...SS..SS.", "..BB..BB.."];
-const S_DANIELLE= ["..YYYYYY..", ".YYYYYYYY.", ".YYSSSSYY.", "..SSSSSS..", "..PPPPPP..", "..PPPPPP..", "..WWWWWW..", "...SS..SS.", "..PP..PP.."];
-
-const S_BTS_RM  = ["..BBBBBB..", ".BBSSSSBB.", "..SSSSSS..", "..WWWWWW..", "..KK..KK.."];
-const S_BTS_JIM = ["..YYYYYY..", ".YYSSSSYY.", "..SSSSSS..", "..RRRRRR..", "..KK..KK.."];
-const S_BTS_V   = ["..KKKKKK..", ".KKSSSSKK.", "..SSSSSS..", "..bBbbbB..", "..KK..KK.."];
-const S_BTS_JK  = ["..KKKKKK..", ".KKSSSSKK.", "..SSSSSS..", "..KKKKKK..", "..KK..KK.."];
-
-const S_BP_JEN  = ["..KKKKKK..", ".KKSSSSKK.", "..SSSSSS..", "..PPPPPP..", "..KK..KK.."];
-const S_BP_LISA = ["..YYYYYY..", ".YYSSSSYY.", "..SSSSSS..", "..KKKKKK..", "..KK..KK.."];
-const S_BP_ROSE = ["..PPPPPP..", ".PPSSSSPP.", "..SSSSSS..", "..WWWWWW..", "..KK..KK.."];
-const S_BP_JIS  = ["..KKKKKK..", ".KKSSSSKK.", "..SSSSSS..", "..RRRRRR..", "..KK..KK.."];
-
-const S_MAN_DAM = ["..KKKKKK..", ".KKSSSSKK.", "..SSSSSS..", "..RRRRRR..", "..KK..KK.."];
-const S_MAN_VIC = ["..YYYYYY..", ".YYSSSSYY.", "..SSSSSS..", "..PPPPPP..", "..KK..KK.."];
-
-const S_SKZ_CHAN= ["..RRRRRR..", ".RRSSSSRR.", "..SSSSSS..", "..KKKKKK..", "..KK..KK.."];
-const S_SKZ_FELX= ["..YYYYYY..", ".YYSSSSYY.", "..SSSSSS..", "..WWWWWW..", "..KK..KK.."];
-
-const S_EN_JUNG = ["..VVVVVV..", ".VVSSSSVV.", "..SSSSSS..", "..WWWWWW..", "..KK..KK.."];
-const S_EN_HEE  = ["..KKKKKK..", ".KKSSSSKK.", "..SSSSSS..", "..RRRRRR..", "..KK..KK.."];
-
-const S_TW_NAY  = ["..PPPPPP..", ".PPSSSSPP.", "..SSSSSS..", "..YYYYYY..", "..KK..KK.."];
-const S_TW_JIH  = ["..CCCCCC..", ".CCSSSSCC.", "..SSSSSS..", "..BBBBBB..", "..KK..KK.."];
-
-const S_NCT_TAE = ["..GGGGGG..", ".GGSSSSGG.", "..SSSSSS..", "..bBbbbB..", "..KK..KK.."];
-const S_NCT_MRK = ["..KKKKKK..", ".KKSSSSKK.", "..SSSSSS..", "..WWWWWW..", "..KK..KK.."];
-
-const S_KAT_DAN = ["..OOOOOO..", ".OOSSSSOO.", "..SSSSSS..", "..PPPPPP..", "..KK..KK.."];
-const S_KAT_LAR = ["..CCCCCC..", ".CCSSSSCC.", "..SSSSSS..", "..WWWWWW..", "..KK..KK.."];
-
-const S_SABRINA = ["..YYYYYY..", ".YYYYYYYY.", ".YYKKKKYY.", ".YYSSSKKY.", "..SSSSSS..", "..BBBBBB..", "..BBPPBB..", "...SSSS...", "..WW..WW.."];
-const S_WEEKND  = ["..KKKKKK..", ".KKKKKKKK.", ".KKTKKTTK.", "..KKKKKK..", "...TRRRRT.", "..RRKRRRRR.", "..TTKKKKTT.", "...KK..KK.", "..KK..KK.."];
-const S_MICHAEL = ["..KKKKKK..", ".KKKKKKKK.", ".KKSSSSSK.", "...SSSSS..", "..RRRRRRRR.", ".RRKKRRKKR.", "...KK..KK.", "...WW..WW.", "..KK..KK.."];
-const S_TAYLOR  = ["..YYYYYY..", ".YYYYYYYY.", ".YYSSSSYY.", "..SSSSSS..", "..RRRRRR..", "..RRRRRR..", "..SSSSSS..", "...SS..SS.", "..YY..YY.."];
-const S_GAGA    = ["..WWWWWW..", ".WWWWWWWW.", ".WWSSSSWW.", "..SSSSSS..", "..KKKKKK..", "..KKKKKK..", "..KKKKKK..", "...KK..KK.", "..KK..KK.."];
-const S_CHARLIE = ["..KKKKKK..", ".KKKKKKKK.", ".KKSSSSKK.", "..SSSSSS..", "..WWWWWW..", "..WWWWWW..", "..bBbbbB..", "...KK..KK.", "..WW..WW.."];
-const S_MELANIE = ["..PPRRKK..", ".PPPPRKKK.", ".PPSSSKKK.", "..SSSSSS..", "..PWWWWP..", "..PPPPPP..", "...SSSS...", "..KK..KK.."];
-const S_HARRY   = ["..KKKKKK..", ".KKKKKKKK.", ".KKSSSSKK.", "..SSSSSS..", "..RRRRRR..", "..RRRRRR..", "..WWWWWW..", "...WW..WW.", "..KK..KK.."];
-const S_OLIVIA  = ["..KKKKKK..", ".KKKKKKKK.", ".KKSSSSKK.", "..SSSSSS..", "..VVVVVV..", "..VVVVVV..", "..KKKKKK..", "...KK..KK.", "..KK..KK.."];
-const S_MIKU    = ["MMMMMMMMMM", "MMMMMMMMMM", ".MMSSSSMM.", "..SSSSSS..", "..WWWWWW..", "..MMMMMM..", "...SSSS...", "...KK..KK.", "..MM..MM.."];
-const S_BADBUNNY= ["..KKKKKK..", ".KKKKKKKK.", ".KKTSSSTK.", "..TTTTTT..", "..OOOOOO..", "..OOOOOO..", "..KKKKKK..", "...KK..KK.", "..WW..WW.."];
-const S_MADONNA = ["..YYYYYY..", ".YYYYYYYY.", ".YYSSSSYY.", "..SSSSSS..", "..PPPPPP..", "..PPPPPP..", "..KKKKKK..", "...KK..KK.", "..PP..PP.."];
-const S_BRUNO   = ["..KKKKKK..", ".KKKKKKKK.", ".KKTSSSTK.", "..TTTTTT..", "..YYYYYY..", "..YYYYYY..", "..KKKKKK..", "...KK..KK.", "..WW..WW.."];
-const S_EMINEM  = ["..YYYYYY..", ".YYYYYYYY.", ".YYSSSSYY.", "..SSSSSS..", "..WWWWWW..", "..WWWWWW..", "..KKKKKK..", "...KK..KK.", "..WW..WW.."];
-const S_ED      = ["..OOOOOO..", ".OOOOOOOO.", ".OOSSSSOO.", "..SSSSSS..", "..bBbbbB..", "..bBbbbB..", "..KKKKKK..", "...KK..KK.", "..WW..WW.."];
-
-// Ícones de Itens
-const I_CROWN   = ["Y.Y.Y.Y.", "YYYYYYYY", "YRRRRRRY", "YYYYYYYY", ".YYYYYY."];
-const I_BELL    = ["..YYYY..", ".YYYYYY.", "YYYYYYYY", "YYYYYYYY", "..YYYY.."];
-const I_MILL    = [".WWWWWW.", "WWWWWWWW", "WWKKKKWW", ".CCCCCC.", "..CCCC.."];
-const I_BUNNY   = ["PP....PP", "PP....PP", "PPPPPPPP", ".PPKKPP.", "..PPPP.."];
-const I_COFFEE  = [".WW..WW.", ".CCCCCC.", ".CKKKKC.", ".CCCCCC.", "..CCCC.."];
-const I_DYNA    = ["...WW...", "..RRRR..", "..RRRR..", "..RRRR..", "..RRRR.."];
-const I_HAMMER  = [".PPPPPP.", "PPPPPPPP", ".PPPPPP.", "...KK...", "...KK..."];
-const I_MIC     = ["..YYYY..", ".YYYYYY.", "..YYYY..", "...KK...", "..KKKK.."];
-const I_CRYSTAL = ["..PPPP..", ".PPWWPP.", "PPWWWWPP", ".PPPPPP.", "..PPPP.."];
-const I_CROSS   = ["...WW...", ".WWWWWW.", "...WW...", "...WW...", "...WW..."];
-const I_DIAMOND = ["..NNNN..", ".NNWWNN.", "NNNNNNNN", ".NNNNNN.", "..NNNN.."];
-const I_RECORD  = ["..KKKK..", ".KKYYKK.", ".KKYWKK.", ".KKYYKK.", "..KKKK.."];
-const I_PHONE   = ["..KKKK..", ".KBBBBK.", ".KBBBBK.", ".KBBBBK.", "..KKKK.."];
-const I_BOXING  = [".RRRRRR.", "RRRRRRRR", "RRRRRRRR", ".RRRRRR.", "..RRRR.."];
-
-const ITEM_STAR = ["...YY...", "..YYYY..", "YYYYYYYY", ".YYYYYY.", "..YYYY..", ".YY..YY."];
-const ITEM_HEART= [".RR..RR.", "RRWWRRRR", "RRRRRRRR", ".RRRRRR.", "..RRRR..", "...RR..."];
-
-// ============================================================================
-// 4. ROSTER COM 27 ARTISTAS E DIFICULDADES GRADUADAS (1 A 20)
-// ============================================================================
-const ROSTER = [
-  { id: 0, artist: "Sabrina Carpenter", title: "ESPRESSO", isBand: false, category: "SOLO", difficulty: 1, track: TRACK_ESPRESSO, members: [{name:"Sabrina", sprite:S_SABRINA}], sky:"#38bdf8", ground:"#b45309", accent:"#f43f5e", theme:"Praia Retrô Pastel", itemSprite:I_COFFEE, itemName:"Café Expresso", layoutType:"BEACH" },
-  { id: 1, artist: "NewJeans", title: "SUPER SHY", isBand: true, category: "BANDA", difficulty: 2, track: TRACK_NEWJEANS, members: [{name:"Minji", sprite:S_MINJI}, {name:"Hanni", sprite:S_HANNI}, {name:"Danielle", sprite:S_DANIELLE}], sky:"#60a5fa", ground:"#f472b6", accent:"#facc15", theme:"Praça Y2K com Bondinho", itemSprite:I_BUNNY, itemName:"Orelhas Bunny", layoutType:"STREET" },
-  { id: 2, artist: "Ed Sheeran", title: "SHAPE OF YOU", isBand: false, category: "SOLO", difficulty: 3, track: TRACK_SHAPEOFYOU, members: [{name:"Ed Sheeran", sprite:S_ED}], sky:"#0284c7", ground:"#0f172a", accent:"#38bdf8", theme:"Ringue de Boxe Urbano", itemSprite:I_BOXING, itemName:"Luva de Boxe", layoutType:"STREET" },
-  { id: 3, artist: "Charlie Puth", title: "ATTENTION", isBand: false, category: "SOLO", difficulty: 4, track: TRACK_ATTENTION, members: [{name:"Charlie Puth", sprite:S_CHARLIE}], sky:"#0f172a", ground:"#334155", accent:"#38bdf8", theme:"Cobertura de Luxo Noturna", itemSprite:I_PHONE, itemName:"Smartphone", layoutType:"ROOFTOP" },
-  { id: 4, artist: "Taylor Swift", title: "CRUEL SUMMER", isBand: false, category: "SOLO", difficulty: 5, track: TRACK_CRUELSUMMER, members: [{name:"Taylor Swift", sprite:S_TAYLOR}], sky:"#fb7185", ground:"#38bdf8", accent:"#facc15", theme:"Sunset Strip com Céu Rosa", itemSprite:I_CRYSTAL, itemName:"Coração de Cristal", layoutType:"BEACH" },
-  { id: 5, artist: "Bruno Mars", title: "24K MAGIC", isBand: false, category: "SOLO", difficulty: 6, track: TRACK_THEME_INTRO, members: [{name:"Bruno Mars", sprite:S_BRUNO}], sky:"#1e1b4b", ground:"#854d0e", accent:"#facc15", theme:"Cassino Neon Las Vegas", itemSprite:I_CROWN, itemName:"Anel de Ouro", layoutType:"ROOFTOP" },
-  { id: 6, artist: "Harry Styles", title: "AS IT WAS", isBand: false, category: "SOLO", difficulty: 7, track: TRACK_ASITWAS, members: [{name:"Harry Styles", sprite:S_HARRY}], sky:"#60a5fa", ground:"#dc2626", accent:"#ffffff", theme:"Galeria de Arte Giratória", itemSprite:I_DIAMOND, itemName:"Globo de Espelhos", layoutType:"ROOFTOP" },
-  { id: 7, artist: "TWICE", title: "THE FEELS", isBand: true, category: "BANDA", difficulty: 8, track: TRACK_THEME_INTRO, members: [{name:"Nayeon", sprite:S_TW_NAY}, {name:"Jihyo", sprite:S_TW_JIH}], sky:"#fda4af", ground:"#be185d", accent:"#38bdf8", theme:"Baile Escolar Glamour", itemSprite:I_CRYSTAL, itemName:"Carta de Amor", layoutType:"STREET" },
-  { id: 8, artist: "BTS", title: "DYNAMITE", isBand: true, category: "BANDA", difficulty: 9, track: TRACK_DYNAMITE, members: [{name:"RM", sprite:S_BTS_RM}, {name:"Jimin", sprite:S_BTS_JIM}, {name:"V", sprite:S_BTS_V}, {name:"Jungkook", sprite:S_BTS_JK}], sky:"#f472b6", ground:"#1e1b4b", accent:"#38bdf8", theme:"Loja de Discos Anos 70", itemSprite:I_DYNA, itemName:"Dinamite", layoutType:"ROOFTOP" },
-  { id: 9, artist: "Coldplay", title: "VIVA LA VIDA", isBand: true, category: "BANDA", difficulty: 10, track: TRACK_COLDPLAY, members: [{name:"Chris Martin", sprite:S_CHRIS}, {name:"Jonny Buckland", sprite:S_JONNY}], sky:"#1e1b4b", ground:"#312e81", accent:"#38bdf8", theme:"Muralhas com Bandeira", itemSprite:I_BELL, itemName:"Sino Dourado", layoutType:"CASTLE" },
-  { id: 10, artist: "Melanie Martinez", title: "PLAY DATE", isBand: false, category: "SOLO", difficulty: 11, track: TRACK_THEME_INTRO, members: [{name:"Melanie Martinez", sprite:S_MELANIE}], sky:"#fbcfe8", ground:"#701a75", accent:"#f43f5e", theme:"Casa de Bonecas Retrô", itemSprite:I_CRYSTAL, itemName:"Mamadeira Retrô", layoutType:"STREET" },
-  { id: 11, artist: "KATSEYE", title: "TOUCH", isBand: true, category: "BANDA", difficulty: 12, track: TRACK_THEME_INTRO, members: [{name:"Daniela", sprite:S_KAT_DAN}, {name:"Lara", sprite:S_KAT_LAR}], sky:"#f43f5e", ground:"#4c0519", accent:"#fbcfe8", theme:"Passarela Fashion Y2K", itemSprite:I_CRYSTAL, itemName:"Gloss Labial", layoutType:"STREET" },
-  { id: 12, artist: "Olivia Rodrigo", title: "GOOD 4 U", isBand: false, category: "SOLO", difficulty: 13, track: TRACK_THEME_INTRO, members: [{name:"Olivia Rodrigo", sprite:S_OLIVIA}], sky:"#312e81", ground:"#1e1b4b", accent:"#a855f7", theme:"Ginásio Cheerleader", itemSprite:I_RECORD, itemName:"Luva Cheerleader", layoutType:"STREET" },
-  { id: 13, artist: "Bad Bunny", title: "TITÍ ME PREGUNTÓ", isBand: false, category: "SOLO", difficulty: 14, track: TRACK_THEME_INTRO, members: [{name:"Bad Bunny", sprite:S_BADBUNNY}], sky:"#ea580c", ground:"#431407", accent:"#facc15", theme:"Rua Tropical de Porto Rico", itemSprite:I_RECORD, itemName:"Coração Triste", layoutType:"BEACH" },
-  { id: 14, artist: "The Weeknd", title: "BLINDING LIGHTS", isBand: false, category: "SOLO", difficulty: 15, track: TRACK_BLINDING, members: [{name:"The Weeknd", sprite:S_WEEKND}], sky:"#0c071e", ground:"#1e1b4b", accent:"#06b6d4", theme:"Estrada Synthwave After Hours", itemSprite:I_DIAMOND, itemName:"Diamante Neon", layoutType:"ROOFTOP" },
-  { id: 15, artist: "Madonna", title: "HUNG UP", isBand: false, category: "SOLO", difficulty: 16, track: TRACK_THEME_INTRO, members: [{name:"Madonna", sprite:S_MADONNA}], sky:"#581c87", ground:"#db2777", accent:"#facc15", theme:"Estúdio Disco Espelhado", itemSprite:I_RECORD, itemName:"Cassete Pink", layoutType:"ROOFTOP" },
-  { id: 16, artist: "Måneskin", title: "BEGGIN'", isBand: true, category: "BANDA", difficulty: 17, track: TRACK_BEGGIN, members: [{name:"Damiano", sprite:S_MAN_DAM}, {name:"Victoria", sprite:S_MAN_VIC}], sky:"#18181b", ground:"#7f1d1d", accent:"#facc15", theme:"Palco Rock com Amplificadores", itemSprite:I_MIC, itemName:"Microfone Vintage", layoutType:"OPERA" },
-  { id: 17, artist: "BLACKPINK", title: "DDU-DU DDU-DU", isBand: true, category: "BANDA", difficulty: 18, track: TRACK_BLACKPINK, members: [{name:"Jennie", sprite:S_BP_JEN}, {name:"Lisa", sprite:S_BP_LISA}, {name:"Rosé", sprite:S_BP_ROSE}, {name:"Jisoo", sprite:S_BP_JIS}], sky:"#000000", ground:"#831843", accent:"#f472b6", theme:"Castelo de Xadrez e Chamas", itemSprite:I_HAMMER, itemName:"Martelo Lightstick", layoutType:"CASTLE" },
-  { id: 18, artist: "Stray Kids", title: "GOD'S MENU", isBand: true, category: "BANDA", difficulty: 18, track: TRACK_THEME_INTRO, members: [{name:"Bang Chan", sprite:S_SKZ_CHAN}, {name:"Felix", sprite:S_SKZ_FELX}], sky:"#450a0a", ground:"#18181b", accent:"#ef4444", theme:"Cozinha Industrial com Fogo", itemSprite:I_RECORD, itemName:"Menu Dourado", layoutType:"ROOFTOP" },
-  { id: 19, artist: "Eminem", title: "WITHOUT ME", isBand: false, category: "SOLO", difficulty: 19, track: TRACK_THEME_INTRO, members: [{name:"Slim Shady", sprite:S_EMINEM}], sky:"#0284c7", ground:"#1e293b", accent:"#facc15", theme:"Prédio de Quadrinhos HQ", itemSprite:I_MIC, itemName:"Microfone HQ", layoutType:"STREET" },
-  { id: 20, artist: "NCT 127", title: "KICK IT", isBand: true, category: "BANDA", difficulty: 19, track: TRACK_THEME_INTRO, members: [{name:"Taeyong", sprite:S_NCT_TAE}, {name:"Mark", sprite:S_NCT_MRK}], sky:"#14532d", ground:"#000000", accent:"#22c55e", theme:"Dojo Neo-Oriental Bruce Lee", itemSprite:I_RECORD, itemName:"Nunchaku", layoutType:"ROOFTOP" },
-  { id: 21, artist: "ENHYPEN", title: "BITE ME", isBand: true, category: "BANDA", difficulty: 19, track: TRACK_THEME_INTRO, members: [{name:"Jungwon", sprite:S_EN_JUNG}, {name:"Heeseung", sprite:S_EN_HEE}], sky:"#09090b", ground:"#450a0a", accent:"#dc2626", theme:"Mansão com Candelabros", itemSprite:I_RECORD, itemName:"Cálice Carmesim", layoutType:"CASTLE" },
-  { id: 22, artist: "Hatsune Miku", title: "WORLD IS MINE", isBand: false, category: "SOLO", difficulty: 20, track: TRACK_THEME_INTRO, members: [{name:"Hatsune Miku", sprite:S_MIKU}], sky:"#082f49", ground:"#0e7490", accent:"#22c55e", theme:"Torres Holográficas Neo-Tokyo", itemSprite:I_RECORD, itemName:"Alho-Poró Dourado", layoutType:"ROOFTOP" },
-  { id: 23, artist: "Lady Gaga", title: "BAD ROMANCE", isBand: false, category: "SOLO", difficulty: 20, track: TRACK_BADROMANCE, members: [{name:"Lady Gaga", sprite:S_GAGA}], sky:"#e2e8f0", ground:"#0f172a", accent:"#ef4444", theme:"Casa de Banho Branca", itemSprite:I_CROSS, itemName:"Óculos de Cruz", layoutType:"ROOFTOP" },
-  { id: 24, artist: "Gorillaz", title: "FEEL GOOD INC.", isBand: true, category: "BANDA", difficulty: 20, track: TRACK_GORILLAZ, members: [{name:"2-D", sprite:S_2D}, {name:"Murdoc", sprite:S_MURDOC}, {name:"Noodle", sprite:S_NOODLE}, {name:"Russel", sprite:S_RUSSEL}], sky:"#022c22", ground:"#064e3b", accent:"#22c55e", theme:"Ilha Flutuante do Moinho", itemSprite:I_MILL, itemName:"Moinho Noodle", layoutType:"ISLANDS" },
-  { id: 25, artist: "Michael Jackson", title: "THRILLER", isBand: false, category: "SOLO", difficulty: 20, track: TRACK_THRILLER, members: [{name:"Michael Jackson", sprite:S_MICHAEL}], sky:"#13091f", ground:"#261324", accent:"#c084fc", theme:"Cemitério com Lua de Sangue", itemSprite:I_RECORD, itemName:"Disco de Vinil", layoutType:"CASTLE" },
-  { id: 26, artist: "Queen", title: "BOHEMIAN RHAPSODY", isBand: true, category: "BANDA", difficulty: 20, track: TRACK_QUEEN, members: [{name:"Freddie Mercury", sprite:S_FRED
-
+gameLoop();
+</script>
+</body>
+</html>
